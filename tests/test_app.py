@@ -45,3 +45,9 @@ def test_suma_numeros_grandes(cliente):
     assert respuesta.status_code == 200
     datos = respuesta.get_json()
     assert datos["resultado"] == 300
+
+
+def test_metrics_endpoint_disponible(cliente):
+    respuesta = cliente.get("/metrics")
+    assert respuesta.status_code == 200
+    assert b"flask_http_request" in respuesta.data

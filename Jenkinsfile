@@ -6,6 +6,9 @@ pipeline {
         DOCKER_TAG       = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'local'}"
         DOCKER_REGISTRY  = 'docker.io'
         REGISTRY_CREDS   = credentials('dockerhub-credentials')
+        SONAR_TOKEN      = credentials('sonar-token')
+        SNYK_TOKEN       = credentials('snyk-token')
+        K8S_NAMESPACE    = 'devops-lab'
     }
 
     options {
@@ -52,13 +55,50 @@ pipeline {
                         --cov=src \
                         --cov-report=xml \
                         --cov-fail-under=80 \
+                        --junitxml=test-results.xml \
                         -v
                 '''
             }
             post {
                 always {
-                    junit allowEmptyResults: true, testResults: 'test-results/*.xml'
+                    junit allowEmptyResults: true, testResults: 'test-results.xml'
                 }
+            }
+        }
+
+        stage('Análisis de seguridad - SonarQube') {
+            steps {
+                withSonarQubeEnv('sonarqube-server') {
+                    sh '''
+                        . .venv/bin/activate
+                        sonar-scanner \
+                            -Dsonar.projectKey=devops-lab \
+                            -Dsonar.sources=src \
+                            -Dsonar.tests=tests \
+                            -Dsonar.python.coverage.reportPaths=coverage.xml \
+                            -Dsonar.python.xunit.reportPath=test-results.xml
+                    '''
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Análisis de seguridad - Snyk') {
+            steps {
+                sh '''
+                    . .venv/bin/activate
+                    npm install -g snyk
+                    snyk auth ${SNYK_TOKEN}
+                    snyk test --file=requirements.txt --severity-threshold=high || true
+                    snyk monitor --file=requirements.txt || true
+                '''
             }
         }
 
@@ -79,6 +119,16 @@ pipeline {
             }
         }
 
+        stage('Snyk - Escaneo de imagen Docker') {
+            steps {
+                sh """
+                    snyk container test ${DOCKER_IMAGE}:${DOCKER_TAG} \
+                        --severity-threshold=high \
+                        --file=Dockerfile || true
+                """
+            }
+        }
+
         stage('Publicar en DockerHub') {
             when {
                 branch 'main'
@@ -95,14 +145,35 @@ pipeline {
             }
         }
 
-        stage('Verificar imagen publicada') {
+        stage('Desplegar en Kubernetes') {
             when {
                 branch 'main'
             }
             steps {
                 sh """
-                    docker manifest inspect ${DOCKER_IMAGE}:${DOCKER_TAG} | \
-                        python3 -c "import sys, json; m=json.load(sys.stdin); print('Arquitecturas:', [p['platform']['architecture'] for p in m.get('manifests', [])])"
+                    kubectl apply -f k8s/00-namespace.yaml
+                    kubectl apply -f k8s/01-configmap.yaml
+                    kubectl apply -f k8s/02-deployment.yaml
+                    kubectl apply -f k8s/03-service.yaml
+
+                    kubectl set image deployment/devops-lab-app \
+                        devops-lab=${DOCKER_IMAGE}:${DOCKER_TAG} \
+                        -n ${K8S_NAMESPACE}
+
+                    kubectl rollout status deployment/devops-lab-app \
+                        -n ${K8S_NAMESPACE} --timeout=120s
+                """
+            }
+        }
+
+        stage('Verificar despliegue') {
+            when {
+                branch 'main'
+            }
+            steps {
+                sh """
+                    kubectl get pods -n ${K8S_NAMESPACE} -o wide
+                    kubectl get svc -n ${K8S_NAMESPACE}
                 """
             }
         }

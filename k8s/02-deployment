@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devops-lab-app
+  namespace: devops-lab
+  labels:
+    app: devops-lab
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: devops-lab
+  template:
+    metadata:
+      labels:
+        app: devops-lab
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "5000"
+    spec:
+      containers:
+        - name: devops-lab
+          image: ivanvetr/devops-lab:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: devops-lab-config
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          readinessProbe:
+            httpGet:
+              path: /salud
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /salud
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 15

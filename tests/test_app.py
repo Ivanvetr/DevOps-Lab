@@ -51,4 +51,3 @@ def test_metrics_endpoint_disponible(cliente):
     respuesta = cliente.get("/metrics")
     assert respuesta.status_code == 200
     assert b"flask_http_request" in respuesta.data
-    

@@ -56,16 +56,56 @@ jobs:
             --cov-report=term-missing \
             --cov-report=xml \
             --cov-fail-under=80 \
+            --junitxml=test-results.xml \
             -v
 
       - name: Subir reporte de cobertura
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: coverage.xml
+          path: |
+            coverage.xml
+            test-results.xml
 
-  build-docker:
-    name: Construir imagen Docker
+  security-sonarqube:
+    name: Análisis de seguridad - SonarQube
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Instalar dependencias y generar cobertura
+        run: |
+          pip install -r requirements.txt
+          python -m pytest tests/ \
+            --cov=src \
+            --cov-report=xml \
+            --junitxml=test-results.xml
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v3
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      - name: SonarQube Quality Gate
+        uses: SonarSource/sonarqube-quality-gate-action@master
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  security-snyk:
+    name: Análisis de seguridad - Snyk
     runs-on: ubuntu-latest
     needs: test
 

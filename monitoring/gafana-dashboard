@@ -15,7 +15,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum(rate(flask_http_request_total{app=\"devops-lab\"}[1m])) by (path)",
+          "expr": "sum(rate(flask_http_request_total{app=\"devops-lab-service\"}[1m])) by (path)",
           "legendFormat": "{{path}}",
           "refId": "A"
         }
@@ -29,7 +29,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket{app=\"devops-lab\"}[5m])) by (le, path))",
+          "expr": "histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket{app=\"devops-lab-service\"}[5m])) by (le, path))",
           "legendFormat": "p95 {{path}}",
           "refId": "A"
         }
@@ -43,7 +43,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum(rate(flask_http_request_total{app=\"devops-lab\", status=~\"5..\"}[5m]))",
+          "expr": "sum(rate(flask_http_request_total{app=\"devops-lab-service\", status=~\"5..\"}[5m]))",
           "refId": "A"
         }
       ],
